@@ -53,12 +53,18 @@ if ! [[ "${status}" =~ "Changes to be committed" ]]; then
   confirm "Nothing to amend but you can still change the commit message. Continue?"
 fi
 
-working_branch_bk="${working_branch}-backup-`uuid`"
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  uuid=`uuidgen`
+else
+  uuid=`uuid`
+fi
+
+working_branch_bk="${working_branch}-backup-${uuid}"
 git branch ${working_branch_bk}
 log "Created backup working branch ${working_branch_bk}."
 
 # Switch and commit the fixup to a fixup branch.
-fixup_branch="${working_branch}-fixup-`uuid`"
+fixup_branch="${working_branch}-fixup-${uuid}"
 log "Saving the fixup changes to ${fixup_branch} ..."
 git checkout -b ${fixup_branch}
 git commit --allow-empty -m "Temp commit for fixup."
