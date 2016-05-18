@@ -32,10 +32,14 @@ if [ "${commit_sha}" == "" ]; then
 fi
 
 commit=${commit_sha}
-log "The revision to be amended is:"
-echo "--"
-git show ${commit} --summary
-echo "--"
+
+log "The following commits will be affected":
+echo ""
+git show HEAD --summary --format="format:[HEAD]  %C(auto)%h %s"
+git log --ancestry-path ${commit}..HEAD^ --format="format:        %C(auto)%h %s"
+git show ${commit} --summary --format="format:[AMEND] %C(auto)%h %s"
+echo ""
+log "Only [AMEND] will be amended but all will have new SHA1 value."
 confirm "History is going to be rewritten. Continue?"
 
 # Get current working branch.
