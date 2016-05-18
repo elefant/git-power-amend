@@ -1,0 +1,95 @@
+#!/bin/bash
+
+function log {
+  echo ">>>> $1"
+}
+
+function confirm {
+  while true; do
+    read -p ">>>> $1 [y/n] "
+    case "$REPLY" in 
+      y|Y ) break;;
+      n|N ) exit -1;;
+        * )
+    esac
+  done
+}
+
+if [ "$1" == "" ]; then
+  log "Please specifiy a revision to amend. For example:"
+  log "- git power-amend HEAD^^ "
+  log "- git power-amend 23452345fbd6cee4" 
+  exit -1
+else
+  commit=$1
+fi
+
+# Covert commit (maybe relative like HEAD^^) to SHA number (absolute).
+commit_sha=`git rev-parse --verify ${commit}`
+if [ "${commit_sha}" == "" ]; then
+  log "${commit} is not a valid revision."
+  exit -1
+fi
+
+commit=${commit_sha}
+log "The revision to be amended is:"
+echo "--"
+git show ${commit} --summary
+echo "--"
+confirm "History is going to be rewritten. Continue?"
+
+# Get current working branch.
+working_branch=`git rev-parse --abbrev-ref HEAD`
+if [ "${working_branch}" == "HEAD" ]; then
+  log "You are in 'detached HEAD' state"
+  exit -1
+else
+  log "Working branch is ${working_branch}"
+fi
+
+# Check if there is anything to commit.
+status=`git status`
+if ! [[ "${status}" =~ "Changes to be committed" ]]; then
+  confirm "Nothing to amend but you can still change the commit message. Continue?"
+fi
+
+working_branch_bk="${working_branch}-backup-`uuid`"
+git branch ${working_branch_bk}
+log "Created backup working branch ${working_branch_bk}."
+
+# Switch and commit the fixup to a fixup branch.
+fixup_branch="${working_branch}-fixup-`uuid`"
+log "Saving the fixup changes to ${fixup_branch} ..."
+git checkout -b ${fixup_branch}
+git commit --allow-empty -m "Temp commit for fixup."
+
+# Stash the unstaged changes.
+log "Stashing the unstaged changes ..."
+git stash
+
+# Switch back to the working branch.
+log "Switching back to the working branch ..."
+git checkout ${working_branch}
+
+# Rewind to the revision we'd like to amend.
+log "Rewinding to the revision we'd like to amend ..."
+git reset --hard ${commit}
+
+log "Cherry-picking fixup commit ..."
+git cherry-pick ${fixup_branch} --no-commit
+
+log "Amending commit that we cherry-picked from ${fixup_branch} ..."
+git commit --amend
+
+log "Cherry-picking the untouched commits ..."
+# Grab back the untouched changes.
+git cherry-pick ${commit}..${working_branch_bk}
+
+# Restore un-staged changes.
+log "Restoring un-staged changes ..."
+git stash pop
+
+# Clean up the temp branches.
+log "Cleaning up the temp branches ..."
+git branch -D ${fixup_branch}
+git branch -D ${working_branch_bk}
